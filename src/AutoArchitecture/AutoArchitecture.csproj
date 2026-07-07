@@ -13,13 +13,14 @@
     <NoWarn>$(NoWarn);NU5017;NU5128</NoWarn>
 
     <PackageId>AutoArchitecture</PackageId>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Authors>Justin Bannister</Authors>
     <Copyright>Copyright (c) 2026 Justin Bannister</Copyright>
     <Description>Compile-time architecture/dependency-rule enforcement for .NET using Roslyn source generators. Declare [assembly: ForbidDependency("MyApp.UI", "MyApp.DataAccess")] and get a build warning/error the moment a forbidden reference is introduced — no separate CI step, no NDepend license required.</Description>
     <PackageTags>architecture;dependency-rules;layered-architecture;clean-architecture;roslyn;source-generator;analyzer;dotnet;csharp;ndepend-alternative;static-analysis;compile-time</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <RepositoryUrl>https://github.com/Swevo/AutoArchitecture</RepositoryUrl>
     <PackageProjectUrl>https://github.com/Swevo/AutoArchitecture</PackageProjectUrl>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
@@ -28,7 +29,7 @@
     <IncludeSymbols>false</IncludeSymbols>
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
-    <PackageReleaseNotes>1.0.0: Initial release. [assembly: ForbidDependency(from, to)] with AA001 diagnostic.</PackageReleaseNotes>
+    <PackageReleaseNotes>1.0.1: Add missing package icon. 1.0.0: Initial release. [assembly: ForbidDependency(from, to)] with AA001 diagnostic.</PackageReleaseNotes>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.*" PrivateAssets="all" />
@@ -41,6 +42,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\icon.png" Pack="true" PackagePath="\" />
     <!-- Place the generator DLL in analyzers/dotnet/cs/ so NuGet loads it as a source generator -->
     <None Include="$(OutputPath)$(AssemblyName).dll"
           Pack="true"
