@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <!-- NU5017: symbols package empty (no PDB — expected for source generators)  -->
+    <!-- NU5128: no lib/netstandard2.0/ assembly — expected since DLL is in analyzers/ -->
+    <NoWarn>$(NoWarn);NU5017;NU5128</NoWarn>
+
+    <PackageId>AutoArchitecture</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Justin Bannister</Authors>
+    <Copyright>Copyright (c) 2026 Justin Bannister</Copyright>
+    <Description>Compile-time architecture/dependency-rule enforcement for .NET using Roslyn source generators. Declare [assembly: ForbidDependency("MyApp.UI", "MyApp.DataAccess")] and get a build warning/error the moment a forbidden reference is introduced — no separate CI step, no NDepend license required.</Description>
+    <PackageTags>architecture;dependency-rules;layered-architecture;clean-architecture;roslyn;source-generator;analyzer;dotnet;csharp;ndepend-alternative;static-analysis;compile-time</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/Swevo/AutoArchitecture</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/Swevo/AutoArchitecture</PackageProjectUrl>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>false</IncludeSymbols>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <PackageReleaseNotes>1.0.0: Initial release. [assembly: ForbidDependency(from, to)] with AA001 diagnostic.</PackageReleaseNotes>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.*" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.*" PrivateAssets="all">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.*" PrivateAssets="all">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <!-- Place the generator DLL in analyzers/dotnet/cs/ so NuGet loads it as a source generator -->
+    <None Include="$(OutputPath)$(AssemblyName).dll"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false" />
+    <!-- MSBuild props file that adds the analyzer reference — required for NuGet to wire it up -->
+    <None Include="build\AutoArchitecture.props" Pack="true" PackagePath="build\" />
+  </ItemGroup>
+</Project>
