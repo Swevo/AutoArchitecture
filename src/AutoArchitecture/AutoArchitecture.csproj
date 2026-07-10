@@ -13,7 +13,7 @@
     <NoWarn>$(NoWarn);NU5017;NU5128</NoWarn>
 
     <PackageId>AutoArchitecture</PackageId>
-    <Version>1.0.1</Version>
+    <Version>1.1.0</Version>
     <Authors>Justin Bannister</Authors>
     <Copyright>Copyright (c) 2026 Justin Bannister</Copyright>
     <Description>Compile-time architecture/dependency-rule enforcement for .NET using Roslyn source generators. Declare [assembly: ForbidDependency("MyApp.UI", "MyApp.DataAccess")] and get a build warning/error the moment a forbidden reference is introduced — no separate CI step, no NDepend license required.</Description>
@@ -29,7 +29,7 @@
     <IncludeSymbols>false</IncludeSymbols>
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
-    <PackageReleaseNotes>1.0.1: Add missing package icon. 1.0.0: Initial release. [assembly: ForbidDependency(from, to)] with AA001 diagnostic.</PackageReleaseNotes>
+    <PackageReleaseNotes>1.1.0: Add opt-in [assembly: DetectCircularDependencies] namespace cycle detection with AA002 diagnostics. 1.0.1: Add missing package icon. 1.0.0: Initial release. [assembly: ForbidDependency(from, to)] with AA001 diagnostic.</PackageReleaseNotes>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.*" PrivateAssets="all" />

@@ -1,9 +1,5 @@
-using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 using Xunit;
 
 namespace AutoArchitecture.Tests;
@@ -188,26 +184,175 @@ public class DiagnosticTests
         Assert.Contains("UI must go through the service layer", diagnostic.GetMessage());
     }
 
-    private static IReadOnlyList<Diagnostic> RunGenerator(string source)
+    [Fact]
+    public void TwoNamespaceCycle_WithAttribute_EmitsAA002()
     {
-        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
-            ?.Split(Path.PathSeparator)
-            .Select(path => (MetadataReference)MetadataReference.CreateFromFile(path))
-            .ToList()
-            ?? new List<MetadataReference>();
+        var source = """
+            [assembly: AutoArchitecture.DetectCircularDependencies]
 
-        var compilation = CSharpCompilation.Create(
-            assemblyName: "DiagnosticTestAssembly",
-            syntaxTrees: new[] { CSharpSyntaxTree.ParseText(source) },
-            references: references,
-            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+            namespace MyApp.A
+            {
+                public class AType
+                {
+                    private readonly B.BType _dependency = new B.BType();
+                }
+            }
 
-        var generator = new AutoArchitectureGenerator();
-        var driver = CSharpGeneratorDriver
-            .Create(generator)
-            .RunGenerators(compilation);
+            namespace MyApp.B
+            {
+                public class BType
+                {
+                    private readonly A.AType _dependency = new A.AType();
+                }
+            }
+            """;
 
-        var result = driver.GetRunResult();
-        return result.Diagnostics;
+        var diagnostics = RunGenerator(source).Where(d => d.Id == "AA002").ToList();
+        Assert.True(diagnostics.Count >= 2);
+        Assert.Contains(diagnostics, diagnostic => diagnostic.GetMessage().Contains("MyApp.A -> MyApp.B -> MyApp.A"));
+        Assert.Contains(diagnostics, diagnostic => diagnostic.GetMessage().Contains("MyApp.B -> MyApp.A -> MyApp.B"));
     }
+
+    [Fact]
+    public void ThreeNamespaceCycle_WithAttribute_EmitsAA002WithFullCycleChain()
+    {
+        var source = """
+            [assembly: AutoArchitecture.DetectCircularDependencies]
+
+            namespace MyApp.A
+            {
+                public class AType
+                {
+                    private readonly B.BType _dependency = new B.BType();
+                }
+            }
+
+            namespace MyApp.B
+            {
+                public class BType
+                {
+                    private readonly C.CType _dependency = new C.CType();
+                }
+            }
+
+            namespace MyApp.C
+            {
+                public class CType
+                {
+                    private readonly A.AType _dependency = new A.AType();
+                }
+            }
+            """;
+
+        var diagnostics = RunGenerator(source).Where(d => d.Id == "AA002").ToList();
+        Assert.True(diagnostics.Count >= 3);
+        Assert.Contains(diagnostics, diagnostic => diagnostic.GetMessage().Contains("MyApp.A -> MyApp.B -> MyApp.C -> MyApp.A"));
+    }
+
+    [Fact]
+    public void DetectCircularDependenciesAttribute_OnAcyclicDiamondGraph_EmitsNoWarning()
+    {
+        var source = """
+            [assembly: AutoArchitecture.DetectCircularDependencies]
+
+            namespace MyApp.B
+            {
+                public class BType { }
+            }
+
+            namespace MyApp.C
+            {
+                public class CType { }
+            }
+
+            namespace MyApp.D
+            {
+                public class DType { }
+            }
+
+            namespace MyApp.A
+            {
+                public class AType
+                {
+                    private readonly B.BType _b = new B.BType();
+                    private readonly C.CType _c = new C.CType();
+                }
+            }
+
+            namespace MyApp.B
+            {
+                public class BUsesD
+                {
+                    private readonly D.DType _dependency = new D.DType();
+                }
+            }
+
+            namespace MyApp.C
+            {
+                public class CUsesD
+                {
+                    private readonly D.DType _dependency = new D.DType();
+                }
+            }
+            """;
+
+        var diagnostics = RunGenerator(source);
+        Assert.DoesNotContain(diagnostics, d => d.Id == "AA002");
+    }
+
+    [Fact]
+    public void CircularDependencyWithoutAttribute_NoAA002()
+    {
+        var source = """
+            namespace MyApp.A
+            {
+                public class AType
+                {
+                    private readonly B.BType _dependency = new B.BType();
+                }
+            }
+
+            namespace MyApp.B
+            {
+                public class BType
+                {
+                    private readonly A.AType _dependency = new A.AType();
+                }
+            }
+            """;
+
+        var diagnostics = RunGenerator(source);
+        Assert.DoesNotContain(diagnostics, d => d.Id == "AA002");
+    }
+
+    [Fact]
+    public void ForbidDependencyAndCircularDependencyRules_CanCoexist()
+    {
+        var source = """
+            [assembly: AutoArchitecture.ForbidDependency("MyApp.A", "MyApp.B", Because = "A must not directly call B")]
+            [assembly: AutoArchitecture.DetectCircularDependencies]
+
+            namespace MyApp.A
+            {
+                public class AType
+                {
+                    private readonly B.BType _dependency = new B.BType();
+                }
+            }
+
+            namespace MyApp.B
+            {
+                public class BType
+                {
+                    private readonly A.AType _dependency = new A.AType();
+                }
+            }
+            """;
+
+        var diagnostics = RunGenerator(source).ToList();
+        Assert.Contains(diagnostics, diagnostic => diagnostic.Id == "AA001");
+        Assert.Contains(diagnostics, diagnostic => diagnostic.Id == "AA002");
+    }
+
+    private static IReadOnlyList<Microsoft.CodeAnalysis.Diagnostic> RunGenerator(string source) => TestCompiler.RunGenerator(source);
 }

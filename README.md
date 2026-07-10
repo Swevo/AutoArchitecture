@@ -32,6 +32,13 @@ namespace 'MyApp.DataAccess', which is forbidden by
 (UI must go through the service layer, not the repositories directly)
 ```
 
+AutoArchitecture can also detect namespace cycles — the capability NDepend is best known
+for — with an opt-in assembly attribute:
+
+```csharp
+[assembly: AutoArchitecture.DetectCircularDependencies]
+```
+
 ## Install
 
 ```bash
@@ -59,6 +66,56 @@ project (e.g. in `AssemblyInfo.cs` or alongside your `Program.cs`):
   ```ini
   dotnet_diagnostic.AA001.severity = error
   ```
+
+## Circular Dependency Detection
+
+Add `[assembly: DetectCircularDependencies]` when you want AutoArchitecture to analyze the
+entire compilation's namespace graph and flag actual dependency cycles:
+
+```csharp
+[assembly: AutoArchitecture.DetectCircularDependencies]
+
+namespace MyApp.A
+{
+    public class AType
+    {
+        private readonly B.BType _dependency = new B.BType();
+    }
+}
+
+namespace MyApp.B
+{
+    public class BType
+    {
+        private readonly C.CType _dependency = new C.CType();
+    }
+}
+
+namespace MyApp.C
+{
+    public class CType
+    {
+        private readonly A.AType _dependency = new A.AType();
+    }
+}
+```
+
+That produces warnings on the participating references, for example:
+
+```
+warning AA002: 'AType' in namespace 'MyApp.A' references 'BType' in namespace 'MyApp.B',
+creating a circular dependency: MyApp.A -> MyApp.B -> MyApp.C -> MyApp.A
+```
+
+- Circular dependency detection is **opt-in** because it analyzes the full namespace
+  dependency graph for the current compilation.
+- AA002 is a `Warning` by default and can be promoted/demoted with standard Roslyn severity
+  configuration:
+  ```ini
+  dotnet_diagnostic.AA002.severity = error
+  ```
+- AA001 and AA002 can be enabled together: explicit `ForbidDependency` rules still catch
+  disallowed directions even when those references are also part of a cycle.
 
 ## Design goals
 

@@ -45,6 +45,16 @@ public sealed class AutoArchitectureGenerator : IIncrementalGenerator
                 /// <summary>Optional human-readable justification included in the diagnostic message.</summary>
                 public string? Because { get; set; }
             }
+
+            /// <summary>
+            /// Enables opt-in circular dependency detection between namespaces in the current
+            /// compilation. Apply at assembly level:
+            /// <c>[assembly: AutoArchitecture.DetectCircularDependencies]</c>
+            /// </summary>
+            [System.AttributeUsage(System.AttributeTargets.Assembly, AllowMultiple = false, Inherited = false)]
+            public sealed class DetectCircularDependenciesAttribute : System.Attribute
+            {
+            }
         }
         """;
 
@@ -52,6 +62,14 @@ public sealed class AutoArchitectureGenerator : IIncrementalGenerator
         id: "AA001",
         title: "Forbidden namespace dependency",
         messageFormat: "'{0}' in namespace '{1}' references '{2}' in namespace '{3}', which is forbidden by [assembly: ForbidDependency(\"{1}\", \"{3}\")]{4}",
+        category: "AutoArchitecture",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor CircularDependencyRule = new(
+        id: "AA002",
+        title: "Circular namespace dependency",
+        messageFormat: "'{0}' in namespace '{1}' references '{2}' in namespace '{3}', creating a circular dependency: {4}",
         category: "AutoArchitecture",
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
@@ -68,62 +86,132 @@ public sealed class AutoArchitectureGenerator : IIncrementalGenerator
     private static void Analyze(Compilation compilation, SourceProductionContext context)
     {
         var rules = GetRules(compilation);
-        if (rules.Count == 0)
+        var detectCircularDependencies = HasCircularDependencyDetectionEnabled(compilation);
+        if (rules.Count == 0 && !detectCircularDependencies)
         {
             return;
         }
 
+        var references = GetNamespaceReferences(compilation, context.CancellationToken);
+
+        if (rules.Count > 0)
+        {
+            ReportForbiddenDependencyDiagnostics(references, rules, context);
+        }
+
+        if (detectCircularDependencies)
+        {
+            ReportCircularDependencyDiagnostics(references, context);
+        }
+    }
+
+    private static IReadOnlyList<NamespaceReference> GetNamespaceReferences(
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var references = new List<NamespaceReference>();
+
         foreach (var tree in compilation.SyntaxTrees)
         {
             var semanticModel = compilation.GetSemanticModel(tree);
-            var root = tree.GetRoot(context.CancellationToken);
+            var root = tree.GetRoot(cancellationToken);
 
             foreach (var typeDecl in root.DescendantNodes().OfType<BaseTypeDeclarationSyntax>())
             {
-                var typeSymbol = semanticModel.GetDeclaredSymbol(typeDecl, context.CancellationToken) as INamedTypeSymbol;
+                var typeSymbol = semanticModel.GetDeclaredSymbol(typeDecl, cancellationToken) as INamedTypeSymbol;
                 if (typeSymbol is null)
                 {
                     continue;
                 }
 
                 var fromNamespace = typeSymbol.ContainingNamespace?.ToDisplayString() ?? string.Empty;
-                var matchingRules = rules.Where(r => IsInNamespace(fromNamespace, r.FromNamespace)).ToList();
-                if (matchingRules.Count == 0)
-                {
-                    continue;
-                }
 
                 foreach (var nameNode in typeDecl.DescendantNodes().OfType<SimpleNameSyntax>())
                 {
-                    var symbol = semanticModel.GetSymbolInfo(nameNode, context.CancellationToken).Symbol;
+                    var symbol = semanticModel.GetSymbolInfo(nameNode, cancellationToken).Symbol;
                     var referencedType = ResolveRelevantType(symbol);
                     if (referencedType is null)
                     {
                         continue;
                     }
 
-                    var toNamespace = referencedType.ContainingNamespace?.ToDisplayString() ?? string.Empty;
-
-                    foreach (var rule in matchingRules)
-                    {
-                        if (!IsInNamespace(toNamespace, rule.ToNamespace))
-                        {
-                            continue;
-                        }
-
-                        var because = string.IsNullOrEmpty(rule.Because) ? string.Empty : $" ({rule.Because})";
-                        var diagnostic = Diagnostic.Create(
-                            ForbiddenDependencyRule,
-                            nameNode.GetLocation(),
-                            typeSymbol.Name,
-                            fromNamespace,
-                            referencedType.Name,
-                            toNamespace,
-                            because);
-                        context.ReportDiagnostic(diagnostic);
-                    }
+                    references.Add(new NamespaceReference(
+                        typeSymbol.Name,
+                        fromNamespace,
+                        referencedType.Name,
+                        referencedType.ContainingNamespace?.ToDisplayString() ?? string.Empty,
+                        nameNode.GetLocation()));
                 }
             }
+        }
+
+        return references;
+    }
+
+    private static void ReportForbiddenDependencyDiagnostics(
+        IReadOnlyList<NamespaceReference> references,
+        IReadOnlyList<DependencyRule> rules,
+        SourceProductionContext context)
+    {
+        foreach (var reference in references)
+        {
+            var matchingRules = rules.Where(rule => IsInNamespace(reference.FromNamespace, rule.FromNamespace)).ToList();
+            if (matchingRules.Count == 0)
+            {
+                continue;
+            }
+
+            foreach (var rule in matchingRules)
+            {
+                if (!IsInNamespace(reference.ToNamespace, rule.ToNamespace))
+                {
+                    continue;
+                }
+
+                var because = string.IsNullOrEmpty(rule.Because) ? string.Empty : $" ({rule.Because})";
+                context.ReportDiagnostic(Diagnostic.Create(
+                    ForbiddenDependencyRule,
+                    reference.Location,
+                    reference.SourceTypeName,
+                    reference.FromNamespace,
+                    reference.ReferencedTypeName,
+                    reference.ToNamespace,
+                    because));
+            }
+        }
+    }
+
+    private static void ReportCircularDependencyDiagnostics(
+        IReadOnlyList<NamespaceReference> references,
+        SourceProductionContext context)
+    {
+        var analysis = CircularDependencyDetector.Analyze(
+            references
+                .Where(static reference => !string.IsNullOrEmpty(reference.FromNamespace)
+                    && !string.IsNullOrEmpty(reference.ToNamespace)
+                    && !string.Equals(reference.FromNamespace, reference.ToNamespace, StringComparison.Ordinal))
+                .Select(static reference => new NamespaceDependencyEdge(reference.FromNamespace, reference.ToNamespace)));
+
+        if (analysis.Components.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var reference in references)
+        {
+            if (!analysis.IsCycleParticipant(reference.FromNamespace, reference.ToNamespace))
+            {
+                continue;
+            }
+
+            context.ReportDiagnostic(Diagnostic.Create(
+                CircularDependencyRule,
+                reference.Location,
+                reference.SourceTypeName,
+                reference.FromNamespace,
+                reference.ReferencedTypeName,
+                reference.ToNamespace,
+                analysis.GetCycleChain(reference.FromNamespace, reference.ToNamespace)));
         }
     }
 
@@ -151,9 +239,16 @@ public sealed class AutoArchitectureGenerator : IIncrementalGenerator
             || ns.StartsWith(prefix + ".", StringComparison.Ordinal);
     }
 
-    private static List<(string FromNamespace, string ToNamespace, string? Because)> GetRules(Compilation compilation)
+    private static bool HasCircularDependencyDetectionEnabled(Compilation compilation)
     {
-        var rules = new List<(string, string, string?)>();
+        return compilation.Assembly
+            .GetAttributes()
+            .Any(static attribute => attribute.AttributeClass?.ToDisplayString() == "AutoArchitecture.DetectCircularDependenciesAttribute");
+    }
+
+    private static List<DependencyRule> GetRules(Compilation compilation)
+    {
+        var rules = new List<DependencyRule>();
 
         foreach (var attribute in compilation.Assembly.GetAttributes())
         {
@@ -183,9 +278,52 @@ public sealed class AutoArchitectureGenerator : IIncrementalGenerator
                 }
             }
 
-            rules.Add((from!, to!, because));
+            rules.Add(new DependencyRule(from!, to!, because));
         }
 
         return rules;
+    }
+
+    private readonly struct DependencyRule
+    {
+        public DependencyRule(string fromNamespace, string toNamespace, string? because)
+        {
+            FromNamespace = fromNamespace;
+            ToNamespace = toNamespace;
+            Because = because;
+        }
+
+        public string FromNamespace { get; }
+
+        public string ToNamespace { get; }
+
+        public string? Because { get; }
+    }
+
+    private readonly struct NamespaceReference
+    {
+        public NamespaceReference(
+            string sourceTypeName,
+            string fromNamespace,
+            string referencedTypeName,
+            string toNamespace,
+            Location location)
+        {
+            SourceTypeName = sourceTypeName;
+            FromNamespace = fromNamespace;
+            ReferencedTypeName = referencedTypeName;
+            ToNamespace = toNamespace;
+            Location = location;
+        }
+
+        public string SourceTypeName { get; }
+
+        public string FromNamespace { get; }
+
+        public string ReferencedTypeName { get; }
+
+        public string ToNamespace { get; }
+
+        public Location Location { get; }
     }
 }
