@@ -131,6 +131,20 @@ creating a circular dependency: MyApp.A -> MyApp.B -> MyApp.C -> MyApp.A
 - Allow-list exceptions for specific types within an otherwise-forbidden namespace pair
   are planned for a future release, to support gradual migrations.
 
+## Related Packages
+
+| Package | Downloads | Description |
+|---|---|---|
+| [AutoWire](https://www.nuget.org/packages/AutoWire) | [![Downloads](https://img.shields.io/nuget/dt/AutoWire.svg)](https://www.nuget.org/packages/AutoWire) | Compile-time dependency injection auto-registration for  |
+| [AutoMap.Generator](https://www.nuget.org/packages/AutoMap.Generator) | [![Downloads](https://img.shields.io/nuget/dt/AutoMap.Generator.svg)](https://www.nuget.org/packages/AutoMap.Generator) | Compile-time object mapping for  |
+| [AutoQuery.Generator](https://www.nuget.org/packages/AutoQuery.Generator) | [![Downloads](https://img.shields.io/nuget/dt/AutoQuery.Generator.svg)](https://www.nuget.org/packages/AutoQuery.Generator) | Compile-time query composition for IQueryable using Roslyn incremental source generators |
+| [AutoHttpClient.Generator](https://www.nuget.org/packages/AutoHttpClient.Generator) | [![Downloads](https://img.shields.io/nuget/dt/AutoHttpClient.Generator.svg)](https://www.nuget.org/packages/AutoHttpClient.Generator) | Compile-time typed HTTP client generation for  |
+| [AutoDispatch.Generator](https://www.nuget.org/packages/AutoDispatch.Generator) | [![Downloads](https://img.shields.io/nuget/dt/AutoDispatch.Generator.svg)](https://www.nuget.org/packages/AutoDispatch.Generator) | Compile-time CQRS dispatcher for  |
+| [AutoLog.Generator](https://www.nuget.org/packages/AutoLog.Generator) | [![Downloads](https://img.shields.io/nuget/dt/AutoLog.Generator.svg)](https://www.nuget.org/packages/AutoLog.Generator) | Compile-time high-performance logging for  |
+| [AutoValidate.Generator](https://www.nuget.org/packages/AutoValidate.Generator) | [![Downloads](https://img.shields.io/nuget/dt/AutoValidate.Generator.svg)](https://www.nuget.org/packages/AutoValidate.Generator) | Compile-time FluentValidation wiring for  |
+
+---
+
 ## 💼 Need .NET consulting?
 
 I'm the author of AutoArchitecture and a suite of compile-time source generators
